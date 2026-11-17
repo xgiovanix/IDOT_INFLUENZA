@@ -1,0 +1,1362 @@
+# The data processing procedures implemented in this script are based on and adapted from:
+#
+# Osowski, G. V., de Carvalho, M., Filho, A. P. da S., Gomes, M. F. C. da C.,
+# CGCOVID/DEDT/SVSA/MS. (2025).
+# R script for descriptive analysis of SARI data: Weekly Epidemiological Report.
+# Brazilian Ministry of Health, Brazil.
+# Available at: [INSERT REPOSITORY LINK]
+#
+# The original script was adapted for the purposes of the present study,
+# particularly regarding SARI operational definitions, variable standardisation,
+# respiratory virus identification and classification, viral co-detection,
+# and epidemiological outcome classification.
+
+# - As variáveis ORIGINAIS do banco de dados são escritas em LETRAS MAIÚSCULAS.
+# - As variáveis CRIADAS no decorrer da análise são escritas em letras minúsculas.
+# - Comentários são utilizados ao longo do script para explicar cada etapa.
+
+
+# ..........................................................................................
+# Basta instalar os pacotes apenas uma vez na máquina
+# ..........................................................................................
+# install.packages("arrow")
+# install.packages("classInt")
+# install.packages("cowplot")
+# install.packages("data.table")
+# install.packages("dplyr")
+# install.packages("flextable")
+# install.packages("foreign")
+# install.packages("geobr")
+# install.packages("ggplot2")
+# install.packages("ggspatial")
+# install.packages("gt")
+# install.packages("htmlwidgets")
+# install.packages("lubridate")
+# install.packages("openxlsx")
+# install.packages("patchwork")
+# install.packages("plotly")
+# install.packages("processx")
+# install.packages("purrr")
+# install.packages("RColorBrewer")
+# install.packages("readr")
+# install.packages("readxl")
+# install.packages("reticulate")
+# install.packages("sf")
+# install.packages("sqldf")
+# install.packages("stringr")
+# install.packages("tibble")
+# install.packages("tidyr")
+# install.packages("tidyverse")
+# install.packages("webshot")
+# install.packages("writexl")
+
+# ..........................................................................................
+# Carregar pacotes
+# ..........................................................................................
+library(arrow)
+library(classInt)
+library(data.table)
+library(dplyr)
+library(flextable)
+library(foreign)
+library(geobr)
+library(ggplot2)
+library(ggspatial)
+library(gt)
+library(htmlwidgets)
+library(lubridate)
+library(openxlsx)
+library(patchwork)
+library(plotly)
+library(processx)
+library(purrr)
+library(readr)
+library(readxl)
+library(reticulate)
+library(RColorBrewer)
+library(sf)
+library(sqldf)
+library(stringr)
+library(tibble)
+library(tidyr)
+library(tidyverse)
+library(webshot)
+library(writexl)
+
+# ..........................................................................................
+#                               CARREGANDO BANCO DE DADOS
+# ..........................................................................................
+getwd()
+# Definir diretório base relativo (pasta "data/raw" dentro do projeto)
+diretorio <- "./data/raw/"
+
+
+df_2023 <- read_parquet(file.path(diretorio, "2023.parquet"))
+df_2024 <- read_parquet(file.path(diretorio, "2024.parquet"))
+df_2025 <- read_parquet(file.path(diretorio, "2025.parquet"))
+df_2026 <- read_parquet(file.path(diretorio, "2026.parquet"))
+
+# Cria lista de dataframes a partir dos nomes
+bases_unidas <- list(df_2023, df_2024, df_2025, df_2026)
+
+# Junta tudo em um único dataframe
+srag_total <- dplyr::bind_rows(bases_unidas)
+
+# ..........................................................................................
+#                               DIRETÓRIOS DE EXPORTAÇÃO
+# ..........................................................................................
+
+# Defina pastas relativas para os formatos de saída
+# path_csv     <- "./data/clean/csv/"
+# path_rdata   <- "./data/clean/rdata/"
+ path_parquet <- "./data/clean/parquet/"
+
+
+# # Lista com nomes dos dataframes
+# lista_bancos <- c("df_2023", "df_2024", "df_2025", "srag_total")
+
+srag_total <- dplyr::bind_rows(bases_unidas)
+
+
+# Função para processar e salvar
+processar_salvar <- function(nome_df) {
+  df <- get(nome_df)
+  
+  # ..........................................................................................
+  ##                       ---- CONVERTENDO VARIAVEIS QUALI/QUANTI ----
+  # ..........................................................................................
+  
+  df <- df %>%
+    
+    # Passo 1: Converter várias colunas para números inteiros
+    mutate(
+      # Aqui pegamos a coluna, que pode estar como fator ou texto, e convertemos para número,
+      # e depois para inteiro para garantir que os dados fiquem num formato correto.
+      EVOLUCAO = as.integer(as.numeric(as.character(EVOLUCAO))),
+      AN_VSR = as.integer(as.numeric(as.character(AN_VSR))),
+      PCR_VSR = as.integer(as.numeric(as.character(PCR_VSR))),
+      PCR_SARS2 = as.integer(as.numeric(as.character(PCR_SARS2))),
+      AN_SARS2 = as.integer(as.numeric(as.character(AN_SARS2))),
+      AN_PARA1 = as.integer(as.numeric(as.character(AN_PARA1))),
+      AN_PARA2 = as.integer(as.numeric(as.character(AN_PARA2))),
+      AN_PARA3 = as.integer(as.numeric(as.character(AN_PARA3))),
+      PCR_PARA1 = as.integer(as.numeric(as.character(PCR_PARA1))),
+      PCR_PARA2 = as.integer(as.numeric(as.character(PCR_PARA2))),
+      PCR_PARA3 = as.integer(as.numeric(as.character(PCR_PARA3))),
+      PCR_PARA4 = as.integer(as.numeric(as.character(PCR_PARA4))),
+      AN_ADENO = as.integer(as.numeric(as.character(AN_ADENO))),
+      PCR_ADENO = as.integer(as.numeric(as.character(PCR_ADENO))),
+      POS_PCRFLU = as.integer(as.numeric(as.character(POS_PCRFLU))),
+      POS_AN_FLU = as.integer(as.numeric(as.character(POS_AN_FLU))),
+      AN_OUTRO = as.integer(as.numeric(as.character(AN_OUTRO))),
+      PCR_OUTRO = as.integer(as.numeric(as.character(PCR_OUTRO))),
+      PCR_METAP = as.integer(as.numeric(as.character(PCR_METAP))),
+      PCR_BOCA = as.integer(as.numeric(as.character(PCR_BOCA))),
+      PCR_RINO = as.integer(as.numeric(as.character(PCR_RINO))),
+      TP_FLU_PCR = as.integer(as.numeric(as.character(TP_FLU_PCR))),
+      TP_FLU_AN = as.integer(as.numeric(as.character(TP_FLU_AN))),
+      PCR_FLUBLI = as.integer(as.numeric(as.character(PCR_FLUBLI))),
+      PCR_FLUASU = as.integer(as.numeric(as.character(PCR_FLUASU))),
+      CS_RACA = as.integer(as.numeric(as.character(CS_RACA))),
+      CS_GESTANT = as.integer(as.numeric(as.character(CS_GESTANT))),
+      CLASSI_FIN = as.integer(as.numeric(as.character(CLASSI_FIN))),
+      
+      # Converter essas colunas para texto (caracter)
+      CS_SEXO  = as.character(CS_SEXO)) %>%
+    
+    # Passo 2: Substituir os valores NA (faltantes) por 0 nas colunas numéricas indicadas
+    replace_na(list(
+      EVOLUCAO = 0,
+      AN_VSR = 0,
+      PCR_VSR = 0,
+      PCR_SARS2 = 0,
+      AN_SARS2 = 0, 
+      AN_PARA1 = 0,
+      AN_PARA2 = 0, 
+      AN_PARA3 = 0,
+      PCR_PARA1 = 0,
+      PCR_PARA2 = 0, 
+      PCR_PARA3 = 0,
+      PCR_PARA4 = 0,
+      AN_ADENO = 0,
+      PCR_ADENO = 0,
+      POS_PCRFLU = 0, 
+      POS_AN_FLU = 0,
+      AN_OUTRO = 0,
+      PCR_OUTRO = 0,
+      PCR_METAP = 0,
+      PCR_BOCA = 0, 
+      PCR_RINO = 0,
+      TP_FLU_PCR = 0,
+      TP_FLU_AN = 0,
+      PCR_FLUASU = 0,
+      CS_RACA = 0, 
+      CS_GESTANT = 0,
+      CLASSI_FIN = 0
+    ))
+  
+  # ..........................................................................................
+  ##                       ---- CONVERTENDO DATAS ----
+  # ..........................................................................................
+  
+  df <- df %>%
+    
+    # Usamos mutate para modificar ou criar novas colunas no data frame
+    mutate(
+      # Aqui convertemos as colunas que têm datas em formato texto para o formato Date do R,
+      # para que o R entenda que são datas e possamos fazer operações com elas.
+      DT_NOTIFIC = as.Date(DT_NOTIFIC, format = "%d/%m/%Y"),  # Data de notificação
+      DT_NASC = as.Date(DT_NASC, format = "%d/%m/%Y"),        # Data de nascimento
+      DT_SIN_PRI = as.Date(DT_SIN_PRI, format = "%d/%m/%Y"),  # Data do início dos sintomas
+      DT_EVOLUCA = as.Date(DT_EVOLUCA, format = "%d/%m/%Y")   # Data da evolução (ex: alta ou óbito)
+    )
+  
+  # ..........................................................................................
+  ##                       ---- FILTRO 2. SINAIS E SINTOMAS ----
+  # ..........................................................................................
+  
+  df <- df %>%
+    
+    # Criar a coluna 'criterio_1': TRUE se a pessoa foi hospitalizada (HOSPITAL == 1)
+    # ou se houve evolução para óbito (EVOLUCAO == 2)
+    mutate(criterio_1 = (HOSPITAL == 1 | EVOLUCAO == 2)) %>%
+    
+    # Criar a coluna 'criterio_2': TRUE se o paciente teve tosse (TOSSE == 1)
+    # ou dor de garganta (GARGANTA == 1)
+    mutate(criterio_2 = (TOSSE == 1 | GARGANTA == 1)) %>%
+    
+    # Criar a coluna 'criterio_3': TRUE se teve falta de ar (DISPNEIA == 1)
+    # ou saturação baixa (SATURACAO == 1) ou dificuldade para respirar (DESC_RESP == 1)
+    mutate(criterio_3 = (DISPNEIA == 1 | SATURACAO == 1 | DESC_RESP == 1)) %>%
+    
+    # Criar a coluna 'caso_srag': TRUE somente se todos os 3 critérios forem TRUE
+    mutate(caso_srag = (criterio_1 & criterio_2 & criterio_3)) %>%
+    
+    # Filtrar o banco para manter só as linhas onde 'caso_srag' é TRUE (igual a 1)
+    filter(caso_srag == 1)
+  
+  # ..........................................................................................
+  ##                       ---- FAIXA ETÁRIA ----
+  # ..........................................................................................
+  
+  # Passo 1: Calcular a idade em anos
+  df <- df %>%
+    mutate(
+      idade_anos = ifelse(
+        # Se a data dos sintomas for igual à data de nascimento, não faz sentido calcular idade
+        DT_SIN_PRI == DT_NASC, 
+        NA,  # deixa como NA (sem valor)
+        
+        # Se a data de nascimento for antes da data dos sintomas, calcula a idade
+        ifelse(
+          DT_NASC < DT_SIN_PRI, 
+          # Diferença em dias dividida por 365.25 para converter em anos
+          as.numeric(difftime(DT_SIN_PRI, DT_NASC, units = "days")) / 365.25, 
+          NA  # Caso contrário, deixa como NA
+        )
+      )
+    )
+  
+  # Passo 2: Criar uma nova coluna 'idade_cat' para agrupar as idades em faixas etárias
+  df$idade_cat <- case_when(
+    df$idade_anos < 2 ~ "< 2 anos",
+    df$idade_anos >= 2 & df$idade_anos < 5 ~ "2 a 4 anos",
+    df$idade_anos >= 5 & df$idade_anos < 15 ~ "5 a 14 anos",
+    df$idade_anos >= 15 & df$idade_anos < 50 ~ "15 a 49 anos",
+    df$idade_anos >= 50 & df$idade_anos < 65 ~ "50 a 64 anos",
+    df$idade_anos >= 65 ~ "65 anos ou +",
+    TRUE ~ "Sem informação"
+  )
+  
+  # Passo 3: Mostrar uma tabela com a contagem de pessoas em cada faixa etária
+  table(df$idade_cat)
+  
+  # ..........................................................................................
+  ##                       ---- ANO ----
+  # ..........................................................................................
+  
+  # Passo 1: Criar a coluna 'ano' com base na data do início dos sintomas (DT_SIN_PRI)
+  df$ano <- dplyr::case_when(
+    # Se a data estiver entre 29/dez/2019 e 2/jan/2021, ano é 2020
+    df$DT_SIN_PRI >= as.Date("2019-12-29") & df$DT_SIN_PRI < as.Date("2021-01-03") ~ "2020",
+    
+    # Se a data estiver entre 3/jan/2021 e 1/jan/2022, ano é 2021
+    df$DT_SIN_PRI >= as.Date("2021-01-03") & df$DT_SIN_PRI < as.Date("2022-01-02") ~ "2021",
+    
+    # Se a data estiver entre 2/jan/2022 e 31/dez/2022, ano é 2022
+    df$DT_SIN_PRI >= as.Date("2022-01-02") & df$DT_SIN_PRI < as.Date("2023-01-01") ~ "2022",
+    
+    # Se a data estiver entre 1/jan/2023 e 30/dez/2023, ano é 2023
+    df$DT_SIN_PRI >= as.Date("2023-01-01") & df$DT_SIN_PRI < as.Date("2023-12-31") ~ "2023",
+    
+    # Se a data estiver entre 31/dez/2023 e 28/dez/2024, ano é 2024
+    df$DT_SIN_PRI >= as.Date("2023-12-31") & df$DT_SIN_PRI < as.Date("2024-12-29") ~ "2024",
+    
+    # Se a data estiver entre 29/dez/2024 e 3/jan/2026, ano é 2025
+    df$DT_SIN_PRI >= as.Date("2024-12-29") & df$DT_SIN_PRI < as.Date("2026-01-04") ~ "2025",
+    
+    # Se a data estiver entre 04/jan/2025 e 2/jan/2027, ano é 2026
+    df$DT_SIN_PRI >= as.Date("2026-01-04") & df$DT_SIN_PRI < as.Date("2027-01-02") ~ "2026",
+    
+    # Se não cair em nenhuma dessas datas, marca como "Indefinido"
+    TRUE ~ "Indefinido"  
+  )
+  
+  # Passo 2: Garantir que a coluna 'ano' seja texto (caractere) para facilitar manipulação
+  df$ano <- as.character(df$ano)
+  
+  # Passo 3: criar a coluna de semana epidemiológica (como caractere, só o número)
+  df$se_primeiro_sinto <- as.character(epiweek(df$DT_SIN_PRI))
+  
+  # Passo 4: Mostrar uma tabela com a contagem de pessoas em cada ano
+  table(df$ano)
+  table(df$se_primeiro_sinto)
+  
+  # ..........................................................................................
+  ##                       ---- REGIÃO ----
+  # ..........................................................................................
+  
+  # Passo 1: Função que recebe um estado (sigla UF) e retorna a região correspondente do Brasil
+  definir_regiao <- function(uf) {
+    
+    # Se o estado estiver no vetor do Sul, retorna "Sul"
+    if (uf %in% c('PR', 'SC', 'RS')) {
+      return('Sul')
+      
+      # Se o estado estiver no vetor do Sudeste, retorna "Sudeste"
+    } else if (uf %in% c('MG', 'RJ', 'SP', 'ES')) {
+      return('Sudeste')
+      
+      # Se o estado estiver no vetor do Nordeste, retorna "Nordeste"
+    } else if (uf %in% c('BA', 'SE', 'PE', 'AL', 'PB', 'RN', 'CE', 'PI', 'MA')) {
+      return('Nordeste')
+      
+      # Se o estado estiver no vetor do Centro-Oeste, retorna "Centro-Oeste"
+    } else if (uf %in% c('GO', 'DF', 'MT', 'MS')) {
+      return('Centro-Oeste')
+      
+      # Se o estado estiver no vetor do Norte, retorna "Norte"
+    } else if (uf %in% c('AC', 'AP', 'AM', 'PA', 'RO', 'RR', 'TO')) {
+      return('Norte')
+      
+      # Se não for nenhum dos anteriores, retorna "NA" para indicar valor ausente ou desconhecido
+    } else {
+      return('NA')
+    }
+  }
+  
+  # Aplicar a função 'definir_regiao' para cada estado na coluna 'SG_UF'
+  # O resultado é uma nova coluna 'regiao' no dataframe df
+  df$regiao <- sapply(df$SG_UF, definir_regiao)
+  
+  # Passo 2: Mostrar uma tabela com a contagem por regiao
+  table(df$regiao)
+  
+  # ..........................................................................................
+  #        ---- Classificacao de Casos e Obitos COM codetecção de vírus respiratórios ---- 
+  # ..........................................................................................
+  
+  # ..........................................................................................
+  ##                       ---- SARS-CoV-2 ----
+  # ..........................................................................................
+  
+  # Criando classificação de covid (caso)
+  df$covid_caso <- ifelse(df$PCR_SARS2 == 1 | 
+                            df$AN_SARS2 == 1 | 
+                            df$CLASSI_FIN == 5, 1, 0) 
+  
+  # Verificando o total de observações
+  table(df$covid_caso, df$ano)
+  
+  # Criando a classificação de covid (óbito)
+  df$covid_obito <- ifelse(df$covid_caso == 1 &
+                             df$EVOLUCAO == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$covid_obito, df$ano)
+  
+  table(df$PCR_FLUASU)
+  
+  # ..........................................................................................
+  ##                       ---- INFLUENZA A - H1N1 ----
+  # ..........................................................................................
+  
+  # Criando classificação de H1N1 (caso)
+  df$influenza_h1n1_caso <- ifelse(df$PCR_FLUASU == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_h1n1_caso, df$ano)
+  
+  # Criando classificação de H1N1(óbito)
+  df$influenza_h1n1_obito <- ifelse(df$influenza_h1n1_caso == 1 & 
+                                      df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_h1n1_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ---- INFLUENZA A - H3N2 ----
+  # ..........................................................................................
+  
+  # Criando classificação de H3N2 (caso)
+  df$influenza_h3n2_caso <- ifelse(df$PCR_FLUASU == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_h3n2_caso, df$ano)
+  
+  # Criando classificação de H3N2 (óbito)
+  df$influenza_h3n2_obito <- ifelse(df$influenza_h3n2_caso == 1 &
+                                      df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_h3n2_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  INFLUENZA A - INCONCLUSIVA ----
+  # ..........................................................................................
+  
+  # Criando classificação para influenza A não subtipada (caso)
+  df$influenza_A_inconclusiva_caso <- ifelse(df$PCR_FLUASU == 5 | df$PCR_FLUASU == 6, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_A_inconclusiva_caso, df$ano)
+  
+  # Criando classificação para influenza A não subtipada (óbito)
+  df$influenza_A_inconclusiva_obito <- ifelse(df$influenza_A_inconclusiva_caso == 1 &
+                                                df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_inconclusiva_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ---- INFLUENZA A - NAO SUBTIPAVEL ----
+  # ..........................................................................................
+  
+  # Criando classificação para influenza A não subtipável (caso)
+  df$influenza_A_n_subtipavel_caso <- ifelse(df$PCR_FLUASU == 4, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_A_n_subtipavel_caso, df$ano)
+  
+  # Criando classificação para influenza A não subtipável (óbito)
+  df$influenza_A_n_subtipavel_obito <- ifelse(df$influenza_A_n_subtipavel_caso == 1 &
+                                                df$EVOLUCAO == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_A_n_subtipavel_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  INFLUENZA A - NAO SUBTIPADA ----
+  # ..........................................................................................
+  
+  # Criando classificação para influenza A não subtipada (caso)
+  df$influenza_A_n_sub_caso <- ifelse(df$PCR_FLUASU == 3 | 
+                                        ((df$TP_FLU_AN == 1 | df$TP_FLU_PCR == 1) &
+                                           (df$influenza_h1n1_caso != 1) &
+                                           (df$influenza_h3n2_caso != 1) &
+                                           (df$influenza_A_inconclusiva_caso != 1) &
+                                           (df$influenza_A_n_subtipavel_caso != 1)), 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_A_n_sub_caso, df$ano)
+  
+  # Criando classificação para influenza A não subtipada (óbito)
+  df$influenza_A_n_sub_obito <- ifelse(df$influenza_A_n_sub_caso == 1 &
+                                         df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_n_sub_obito, df$ano)
+  
+  
+  
+  # ..........................................................................................
+  ##                       ----  INFLUENZA A - TOTAL ----
+  # ..........................................................................................
+  
+  # Criando classificação Influenza A (caso)
+  df$influenza_A_total <- ifelse(df$influenza_A_n_sub_caso == 1 |
+                                   df$influenza_A_n_subtipavel_caso == 1 |
+                                   df$influenza_A_inconclusiva_caso == 1 |
+                                   df$influenza_h1n1_caso == 1 |
+                                   df$influenza_h3n2_caso == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_A_total, df$ano)
+  
+  # Criando a classificação de Influenza A (óbito)
+  df$influenza_A_total_obito <- ifelse(df$influenza_A_total == 1 &
+                                         df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_total_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  INFLUENZA B - VICTORIA ----
+  # ..........................................................................................
+  
+  # Criando a classificação para influenza B Victoria (caso)
+  df$influenza_B_vict_caso <- ifelse(df$PCR_FLUBLI == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_B_vict_caso, df$ano)
+  
+  # Criando a classificação para influenza B Victoria (óbito)
+  df$influenza_B_vict_obito <- ifelse(df$influenza_B_vict_caso == 1 &
+                                        df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_vict_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ---- INFLUENZA B - YAMAGATHA ----
+  # ..........................................................................................
+  
+  # Criando a classificação para influenza B Yamagata (caso)
+  df$influenza_B_yam_caso <- ifelse(df$PCR_FLUBLI == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_B_yam_caso, df$ano)
+  
+  # Criando a classificação para influenza B Yamagata (óbito)
+  df$influenza_B_yam_obito <- ifelse(df$influenza_B_yam_caso == 1 &
+                                       df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_yam_obito, df$ano)
+  
+  
+  # ..........................................................................................
+  ##                       ----  INFLUENZA B - INCONCLUSIVO ----
+  # ..........................................................................................
+  variaveis_para_substituir <- c(
+    'influenza_B_vict_caso',
+    'influenza_B_yam_caso')
+  
+  # Substituir NA por 0 nas variáveis listadas
+  # Usamos a função mutate e across para aplicar a substituição de NA por 0 em todas as variáveis da lista
+  df <- df %>%
+    mutate(across(any_of(variaveis_para_substituir), ~ ifelse(is.na(.), 0, .)))
+  
+  
+  # Criando classificação para influenza B inconclusivo (caso)
+  df$influenza_B_inconclusivo_caso <- ifelse((df$TP_FLU_AN == 2 | df$TP_FLU_PCR == 2) &
+                                               (df$influenza_B_vict_caso != 1) & 
+                                               (df$influenza_B_yam_caso != 1),  1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_inconclusivo_caso, df$ano)
+  
+  # Criando a classificação para influenza B inconclusivo (óbito)
+  df$influenza_B_inconclusivo_obito <- ifelse(df$influenza_B_inconclusivo_caso == 1 &
+                                                df$EVOLUCAO == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_B_inconclusivo_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  INFLUENZA B - TOTAL ----
+  # ..........................................................................................
+  
+  variaveis_para_substituir <- c(
+    'influenza_B_inconclusivo_caso')
+  
+  # Substituir NA por 0 nas variáveis listadas
+  # Usamos a função mutate e across para aplicar a substituição de NA por 0 em todas as variáveis da lista
+  df <- df %>%
+    mutate(across(any_of(variaveis_para_substituir), ~ ifelse(is.na(.), 0, .)))
+  
+  
+  # Criando classificação Influenza B (caso)
+  df$influenza_B_total <- ifelse(df$influenza_B_yam_caso == 1 | 
+                                   df$influenza_B_vict_caso == 1 |
+                                   df$influenza_B_inconclusivo_caso == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_B_total, df$ano)
+  
+  # Criando a classificação Influenza B (óbito)
+  df$influenza_B_total_obito <- ifelse(df$influenza_B_total == 1 &
+                                         df$EVOLUCAO == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_B_total_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  INFLUENZA GERAL ----
+  # ..........................................................................................
+  
+  # Criando classificação Infuenza geral (caso)
+  df$influenza_geral_casos <- ifelse(df$influenza_A_total == 1 | 
+                                       df$influenza_B_total == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$influenza_geral_casos, df$ano)
+  
+  
+  # Criando a classificação  Infuenza geral (óbito)
+  df$influenza_geral_obito <- ifelse(df$influenza_geral_casos == 1 &
+                                       df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_geral_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  VSR (VIRUS SINCICIAL RESPIRATORIO) ----
+  # ..........................................................................................
+  
+  # Criando classificação para VSR (caso)
+  df$vsr_caso <- ifelse(df$AN_VSR == 1 |
+                          df$PCR_VSR == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$vsr_caso, df$ano)
+  
+  # Criando classificação para VSR (óbito)
+  df$vsr_obito <- ifelse(df$vsr_caso == 1 &
+                           df$EVOLUCAO == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$vsr_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ---- ADENOVIRUS ----
+  # ..........................................................................................
+  
+  # Criando classificação para Adenovírus (caso)
+  df$adenovirus_caso <- ifelse(df$AN_ADENO == 1 |
+                                 df$PCR_ADENO == 1, 1, 0)
+  # Verificando o total de observações
+  table(df$adenovirus_caso, df$ano)
+  
+  # Criando classificação para Adenovírus (óbito)
+  df$adenovirus_obito <- ifelse(df$adenovirus_caso == 1 &
+                                  df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$adenovirus_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  RINOVÍRUS ----
+  # ..........................................................................................
+  
+  # Criando classificação para Rinovírus (caso)
+  df$rinovirus_caso <- ifelse(df$PCR_RINO == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$rinovirus_caso, df$ano)
+  
+  # Criando classificação para Rinovírus (óbito)
+  df$rinovirus_obito <- ifelse(df$rinovirus_caso == 1 &
+                                 df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$rinovirus_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  PARAINFLUENZA ----
+  # ..........................................................................................
+  
+  # Criando a classificação Parainfluenza (caso)
+  df$parainfluenza_caso <- ifelse((df$AN_PARA1 == 1) |
+                                    (df$AN_PARA2 == 1) |
+                                    (df$AN_PARA3 == 1) |
+                                    (df$PCR_PARA1 == 1) |
+                                    (df$PCR_PARA2 == 1) |
+                                    (df$PCR_PARA3 == 1) |
+                                    (df$PCR_PARA4 == 1), 1, 0)
+  # Verificando o total de observações
+  table(df$parainfluenza_caso, df$ano)
+  
+  # Criando a classificação Parainfluenza (óbito)
+  df$parainfluenza_obito <- ifelse(df$parainfluenza_caso == 1 &
+                                     df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$parainfluenza_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  METAPNEUMOVÍRUS ----
+  # ..........................................................................................
+  
+  # Criando a classificação Metapneumovírus (caso)
+  df$metapneumo_caso <- ifelse(df$PCR_METAP == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$metapneumo_caso, df$ano)
+  
+  # Criando a classificação Metapneumovírus (óbito)
+  df$metapneumo_obito <- ifelse(df$metapneumo_caso == 1 &
+                                  df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$metapneumo_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ---- BOCAVÍRUS ----
+  # ..........................................................................................
+  
+  # Criando a classificação Bocavírus (caso)
+  df$bocavirus_caso <- ifelse(df$PCR_BOCA == 1, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$bocavirus_caso, df$ano)
+  
+  # Criando a classificação Bocavírus (óbito)
+  df$bocavirus_obito <- ifelse(df$bocavirus_caso == 1 &
+                                 df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$bocavirus_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  OUTROS VÍRUS ----
+  # ..........................................................................................
+  
+  # Criando a classificação outros vírus (caso)
+  df$outros_virus_caso <- ifelse(df$PCR_OUTRO == 1 |
+                                   df$AN_OUTRO == 1, 1, 0)
+  # Verificando o total de observações
+  table(df$outros_virus_caso, df$ano)
+  
+  # Criando a classificação  outros vírus (óbito)
+  df$outros_virus_obito <- ifelse(df$outros_virus_caso == 1 &
+                                    df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$outros_virus_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ---- OVR (Outros vírus respiratórios + Adeno + Boca + Meta) ----
+  # ..........................................................................................
+  
+  # Criando a classificação OVR (caso)
+  df$ovr_caso <- ifelse((df$parainfluenza_caso == 1) |
+                          (df$adenovirus_caso == 1) |
+                          (df$bocavirus_caso == 1) |
+                          (df$metapneumo_caso == 1) |
+                          (df$outros_virus_caso == 1), 1, 0)
+  
+  # Verificando o total de observações
+  table(df$ovr_caso, df$ano)
+  
+  
+  # Criando a classificação OVR (óbito)
+  df$ovr_obito <- ifelse(df$ovr_caso == 1 & 
+                           df$EVOLUCAO == 2, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$ovr_obito, df$ano)
+  
+  
+  # ..........................................................................................
+  ##                       ----  CODETECÇÃO ----
+  # ..........................................................................................
+  
+  # Lista de variáveis para substituir NA por 0
+  # Criamos uma lista de variáveis em que substituiremos os valores NA por 0
+  variaveis_para_substituir <- c(
+    'outros_virus_caso', 
+    'covid_caso', 
+    'influenza_h1n1_caso', 
+    'influenza_h3n2_caso',
+    'influenza_A_n_subtipavel_caso',
+    'influenza_A_n_sub_caso', 
+    'influenza_B_vict_caso',
+    'influenza_B_yam_caso', 
+    'influenza_B_inconclusivo_caso', 
+    'vsr_caso', 
+    'adenovirus_caso', 
+    'rinovirus_caso', 
+    'parainfluenza_caso', 
+    'metapneumo_caso', 
+    'bocavirus_caso',
+    'outros_virus_obito', 
+    'covid_obito', 
+    'influenza_h1n1_obito', 
+    'influenza_h3n2_obito',
+    'influenza_A_n_subtipavel_obito', 
+    'influenza_A_n_sub_obito', 
+    'influenza_B_vict_obito',
+    'influenza_B_yam_obito', 
+    'influenza_B_inconclusivo_obito', 
+    'influenza_B_total', 
+    'influenza_B_total_obito',
+    'influenza_geral_casos', 
+    'influenza_geral_obito', 
+    'vsr_obito', 
+    'adenovirus_obito', 
+    'rinovirus_obito', 
+    'parainfluenza_obito', 
+    'metapneumo_obito', 
+    'bocavirus_obito')
+  
+  # Substituir NA por 0 nas variáveis listadas
+  # Usamos a função mutate e across para aplicar a substituição de NA por 0 em todas as variáveis da lista
+  df <- df %>%
+    mutate(across(any_of(variaveis_para_substituir), ~ ifelse(is.na(.), 0, .)))
+  
+  # Criando a nova coluna com a soma das variáveis por linha (casos)
+  # A função rowSums soma os valores de cada linha nas colunas relacionadas aos casos
+  # na.rm = TRUE garante que os valores NA sejam ignorados na soma
+  df$soma_casos <- rowSums(df[, c(
+    'outros_virus_caso', 
+    'covid_caso', 
+    'influenza_h1n1_caso', 
+    'influenza_h3n2_caso',
+    'influenza_A_n_subtipavel_caso',
+    'influenza_A_n_sub_caso', 
+    'influenza_B_vict_caso',
+    'influenza_B_yam_caso', 
+    'influenza_B_inconclusivo_caso', 
+    'vsr_caso', 
+    'adenovirus_caso', 
+    'rinovirus_caso', 
+    'parainfluenza_caso', 
+    'metapneumo_caso', 
+    'bocavirus_caso'
+  )], na.rm = TRUE)
+  
+  # Criando a nova coluna codeteccao_casos
+  # Aqui, criamos uma coluna "codeteccao_casos" que será igual a 1 quando a soma de casos for maior ou igual a 2
+  # Caso contrário, será igual a 0, indicando que o paciente tem pelo menos dois casos positivos de diferentes vírus
+  df$codeteccao_casos <- ifelse(df$soma_casos >= 2, 1, 0)
+  
+  # Criando a nova coluna com a soma das variáveis por linha (óbitos)
+  # Assim como para os casos, usamos rowSums para somar os óbitos nas colunas relacionadas aos óbitos
+  df$soma_obitos <- rowSums(df[, c(
+    'outros_virus_obito', 
+    'covid_obito', 
+    'influenza_h1n1_obito', 
+    'influenza_h3n2_obito',
+    'influenza_A_n_subtipavel_obito', 
+    'influenza_A_n_sub_obito', 
+    'influenza_B_vict_obito',
+    'influenza_B_yam_obito', 
+    'influenza_B_inconclusivo_obito', 
+    'vsr_obito', 
+    'adenovirus_obito',
+    'rinovirus_obito', 
+    'parainfluenza_obito', 
+    'metapneumo_obito', 
+    'bocavirus_obito'
+  )], na.rm = TRUE)
+  
+  # Criando a nova coluna codeteccao_obito
+  # A coluna "codeteccao_obito" será igual a 1 quando a soma de óbitos for maior ou igual a 2
+  # Caso contrário, será igual a 0, indicando que o paciente tem óbitos de diferentes causas
+  df$codeteccao_obito <- ifelse(df$soma_obitos >= 2, 1, 0)
+  
+  
+  # ..........................................................................................
+  ##                       ----  OUTROS AGENTES ETIOLÓGICOS
+  # ..........................................................................................
+  
+  # criando uma coluna com outros agentes etiológicos (caso)
+  df$out_agentes <- ifelse(df$CLASSI_FIN == 3, 1, 0)
+  
+  # Verificando o total de observações
+  table(df$out_agentes, df$ano)
+  
+  # criando uma coluna com outros agentes etiológicos (obitos)
+  df$out_agentes_obito <- ifelse(df$out_agentes == 1 &
+                                   df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$out_agentes_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  NÃO DETECTADOS ----
+  # ..........................................................................................
+  
+  
+  # criando uma coluna com não detectados
+  df <- df %>%
+    mutate(n_detectado = if_else(outros_virus_caso == 0 &
+                                   covid_caso == 0 & 
+                                   influenza_h1n1_caso == 0 & 
+                                   influenza_h3n2_caso == 0 &
+                                   influenza_A_n_subtipavel_caso == 0 &
+                                   influenza_A_n_sub_caso == 0 & 
+                                   influenza_B_vict_caso == 0 & 
+                                   influenza_B_yam_caso == 0 &
+                                   influenza_B_inconclusivo_caso == 0 &
+                                   vsr_caso == 0 &
+                                   adenovirus_caso == 0 & 
+                                   rinovirus_caso == 0 & 
+                                   parainfluenza_caso == 0 &
+                                   metapneumo_caso == 0 & 
+                                   bocavirus_caso == 0 &
+                                   out_agentes == 0, 1, 0))
+  
+  # Verificando o total de observações
+  table(df$n_detectado, df$ano)
+  
+  
+  # ..........................................................................................
+  ##                       ----  EM INVESTIGACAO ----  
+  # ..........................................................................................
+  
+  # criando a var em investigação (caso)
+  df$investigacao <- ifelse(df$CLASSI_FIN == 0 &
+                              df$PCR_RESUL == 5 &
+                              df$n_detectado == 1, 1, 0)
+  # Verificando o total de observações
+  table(df$investigacao, df$ano)
+  
+  # criando a var em investigação (obito) 
+  df$investigacao_obito <- ifelse(df$investigacao == 1 &
+                                    df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$investigacao_obito, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  NÃO ESPECIFICADO ----
+  # ..........................................................................................
+  
+  # criando a var srag não especificado (caso)
+  df$srag_n_especificada <- ifelse(df$CLASSI_FIN == 4 |
+                                     df$n_detectado == 1, 1, 0)
+  # Verificando o total de observações
+  table(df$srag_n_especificada, df$ano)
+  
+  # criando a var srag não especificado (obito)
+  df$srag_n_especificada_obito <- ifelse(df$srag_n_especificada == 1 &
+                                           df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$srag_n_especificada_obito, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- Classificacao de Casos e Obitos SEM codetecção de vírus respiratórios ----
+  # ..........................................................................................
+  
+  
+  # ..........................................................................................
+  ##    ---- SARS-CoV-2 ----
+  # ..........................................................................................
+  
+  
+  # Criando classificação de covid (caso)
+  df$covid_caso_unico <- ifelse(df$covid_caso == 1 &
+                                  df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$covid_caso_unico, df$ano)
+  
+  # Criando a classificação de covid (óbito)
+  df$covid_obito_unico <- ifelse(df$covid_caso_unico == 1 &
+                                   df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$covid_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- INFLUENZA A - H1N1 ----
+  # ..........................................................................................
+  
+  # Criando classificação de Influenza H1N1 (caso)
+  df$influenza_h1n1_caso_unico <- ifelse(df$influenza_h1n1_caso == 1 &
+                                           df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_h1n1_caso_unico, df$ano)
+  
+  # Criando a classificação de Influenza H1N1 (óbito)
+  df$influenza_h1n1_obito_unico <- ifelse(df$influenza_h1n1_caso_unico == 1 &
+                                            df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_h1n1_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ----  INFLUENZA A - H3N2 ----
+  # ..........................................................................................
+  
+  # Criando classificação de influenza H3N2 (caso)
+  df$influenza_h3n2_caso_unico <- ifelse(df$influenza_h3n2_caso == 1 &
+                                           df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_h3n2_caso_unico, df$ano)
+  
+  # Criando a classificação de influenza H3N2 (óbito)
+  df$influenza_h3n2_obito_unico <- ifelse(df$influenza_h3n2_caso_unico == 1 &
+                                            df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_h3n2_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ----  INFLUENZA A - NAO SUBTIPAVEL ----
+  # ..........................................................................................
+  
+  
+  # Criando classificação de Inflenza não subtipável (caso)
+  df$influenza_A_n_subtipavel_caso_unico <- ifelse(df$influenza_A_n_subtipavel_caso == 1 &
+                                                     df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_n_subtipavel_caso_unico, df$ano)
+  
+  # Criando a classificação de Inflenza não subtipável (óbito)
+  df$influenza_A_n_subtipavel_obito_unico <- ifelse(df$influenza_A_n_subtipavel_caso_unico == 1 &
+                                                      df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_n_subtipavel_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ----  INFLUENZA A - NAO SUBTIPADA ----
+  # ..........................................................................................
+  
+  # Criando classificação de Influenza não subtipada (caso)
+  df$influenza_A_n_sub_caso_unico <- ifelse(df$influenza_A_n_sub_caso == 1 &
+                                              df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_n_sub_caso_unico, df$ano)
+  
+  # Criando a classificação de Influenza não subtipada (óbito)
+  df$influenza_A_n_sub_obito_unico <- ifelse(df$influenza_A_n_sub_caso_unico == 1 &
+                                               df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_n_sub_obito_unico, df$ano)
+  
+  
+  # ..........................................................................................
+  ##    ----  INFLUENZA A - GERAL ----
+  # ..........................................................................................
+  
+  # Criando classificação de Influenza geral (caso)
+  df$influenza_A_total_unico <- ifelse(df$influenza_A_total == 1 &
+                                         df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_total_unico, df$ano)
+  
+  # Criando a classificação de Influenza geral (óbito)
+  df$influenza_A_total_obito <- ifelse(df$influenza_A_total_unico == 1 & 
+                                         df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_A_total_obito, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- INFLUENZA B - VICTORIA ----
+  # ..........................................................................................
+  
+  # Criando classificação de Influenza B (caso)
+  df$influenza_B_vict_caso_unico <- ifelse(df$influenza_B_vict_caso == 1 &
+                                             df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_vict_caso_unico, df$ano)
+  
+  
+  # Criando a classificação de Influenza B (óbito)
+  df$influenza_B_vict_obito_unico <- ifelse(df$influenza_B_vict_caso_unico == 1 &
+                                              df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_vict_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- INFLUENZA B - YAMAGATHA ----
+  # ..........................................................................................
+  
+  # Criando classificação de Influenza B Yamagatha (caso)
+  df$influenza_B_yam_caso_unico <- ifelse(df$influenza_B_yam_caso == 1 &
+                                            df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_yam_caso_unico, df$ano)
+  
+  # Criando a classificação de Influenza B Yamagatha (óbito)
+  df$influenza_B_yam_obito_unico <- ifelse(df$influenza_B_yam_caso_unico == 1 &
+                                             df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_yam_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- INFLUENZA B - INCONCLUSIVO ----
+  # ..........................................................................................
+  
+  # Criando classificação de Infleunza B inconclusivo (caso)
+  df$influenza_B_inconclusivo_caso_unico <- ifelse(df$influenza_B_inconclusivo_caso == 1 & 
+                                                     df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_inconclusivo_caso_unico, df$ano)
+  
+  # Criando a classificação de Infleunza B inconclusivo (óbito)
+  df$influenza_B_inconclusivo_obito_unico <- ifelse(df$influenza_B_inconclusivo_caso_unico == 1 &
+                                                      df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_inconclusivo_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- INFLUENZA B - GERAL ----
+  # ..........................................................................................
+  
+  # Criando classificação de Influenza B (caso)
+  df$influenza_B_total_unico <- ifelse(df$influenza_B_total == 1 & 
+                                         df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_total_unico, df$ano)
+  
+  
+  # Criando a classificação de Influenza B  (óbito)
+  df$influenza_B_total_obito_unico <- ifelse(df$influenza_B_total_unico == 1 & 
+                                               df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_B_total_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- INFLUENZA - GERAL ----
+  # ..........................................................................................
+  
+  # Criando classificação de Influenza geral (caso)
+  df$influenza_geral_unico <- ifelse(df$influenza_geral_casos == 1 &
+                                       df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_geral_unico, df$ano)
+  
+  # Criando a classificação de Influenza geral (óbito)
+  df$influenza_geral_obito_unico <- ifelse(df$influenza_geral_unico == 1 &
+                                             df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$influenza_geral_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- VSR (VIRUS SINCICIAL RESPIRATORIO) ----
+  # ..........................................................................................
+  
+  # Criando classificação de VSR (caso)
+  df$vsr_caso_unico <- ifelse(df$vsr_caso == 1 &
+                                df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$vsr_caso_unico, df$ano)
+  
+  # Criando a classificação de VSR (óbito)
+  df$vsr_obito_unico <- ifelse(df$vsr_caso_unico == 1 & 
+                                 df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$vsr_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- ADENOVIRUS ----
+  # ..........................................................................................
+  
+  # Criando classificação de Adenovírus (caso)
+  df$adenovirus_caso_unico <- ifelse(df$adenovirus_caso == 1 &
+                                       df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$adenovirus_caso_unico, df$ano)
+  
+  # Criando a classificação de Adenovírus (óbito)
+  df$adenovirus_obito_unico <- ifelse(df$adenovirus_caso_unico == 1 &
+                                        df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$adenovirus_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- RINOVÍRUS ----
+  # ..........................................................................................
+  
+  # Criando classificação de Rinovírus (caso)
+  df$rinovirus_caso_unico <- ifelse(df$rinovirus_caso == 1 & 
+                                      df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$rinovirus_caso_unico, df$ano)
+  
+  # Criando a classificação de Rinovírus (óbito)
+  df$rinovirus_obito_unico <- ifelse(df$rinovirus_caso_unico == 1 &
+                                       df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$rinovirus_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ---- PARAINFLUENZA ----
+  # ..........................................................................................
+  
+  # Criando classificação de Parainfluenza (caso)
+  df$parainfluenza_caso_unico <- ifelse(df$parainfluenza_caso == 1 & 
+                                          df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$parainfluenza_caso_unico, df$ano)
+  
+  # Criando a classificação de Parainfluenza (óbito)
+  df$parainfluenza_obito_unico <- ifelse(df$parainfluenza_caso_unico == 1 &
+                                           df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$parainfluenza_obito_unico, df$ano)
+  
+  
+  # ..........................................................................................
+  ##    ----  METAPNEUMOVÍRUS ----
+  # ..........................................................................................
+  
+  
+  # Criando classificação de Metapneumovírus (caso)
+  df$metapneumo_caso_unico <- ifelse(df$metapneumo_caso == 1 &
+                                       df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$metapneumo_caso_unico, df$ano)
+  
+  # Criando a classificação de Metapneumovírus (óbito)
+  df$metapneumo_obito_unico <- ifelse(df$metapneumo_caso_unico == 1 &
+                                        df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$metapneumo_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##    ----  BOCAVÍRUS  ----
+  # ..........................................................................................
+  
+  # Criando classificação de Rinovírus (caso)
+  df$bocavirus_caso_unico <- ifelse(df$bocavirus_caso == 1 & 
+                                      df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$bocavirus_caso_unico, df$ano)
+  
+  # Criando a classificação de Rinovírus (óbito)
+  df$bocavirus_obito_unico <- ifelse(df$bocavirus_caso_unico == 1 & 
+                                       df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$bocavirus_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  OUTROS VÍRUS ----
+  # ..........................................................................................
+  
+  
+  # Criando classificação de Outros vírus (caso)
+  df$outros_virus_caso_unico <- ifelse(df$outros_virus_caso == 1 &
+                                         df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$outros_virus_caso_unico, df$ano)
+  
+  
+  # Criando a classificação de Outros vírus (óbito)
+  df$outros_virus_obito_unico <- ifelse(df$outros_virus_caso_unico == 1 &
+                                          df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$outros_virus_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##            ----  OVR (Outros vírus respiratórios + Adeno + Boca + Meta + Rino) ----
+  # ..........................................................................................
+  
+  # Criando classificação de OVR (caso)
+  df$ovr_caso_unico <- ifelse(df$ovr_caso == 1 &
+                                df$codeteccao_casos == 0, 1, 0)
+  # Verificando o total de observações
+  table(df$ovr_caso_unico, df$ano)
+  
+  
+  # Criando a classificação de OVR (óbito)
+  df$ovr_obito_unico <- ifelse(df$ovr_caso_unico == 1 & 
+                                 df$EVOLUCAO == 2, 1, 0)
+  # Verificando o total de observações
+  table(df$ovr_obito_unico, df$ano)
+  
+  # ..........................................................................................
+  ##                       ----  FATOR DE RISCO ----
+  # ..........................................................................................
+  
+  # Criando uma nova variável chamada 'fator_risco' dentro do data frame 'df'
+  # Essa variável vai indicar se a pessoa possui algum fator de risco (1) ou não (0)
+  
+  df$fator_risco <- ifelse(
+    
+    # A função ifelse avalia a condição abaixo e retorna 1 (se for verdadeira) ou 0 (se for falsa)
+    
+    df$ASMA == 1 |           # Tem asma
+      df$FATOR_RISC == 1 |     # Marcou algum fator de risco geral
+      df$CARDIOPATI == 1 |     # Tem cardiopatia (doença cardíaca)
+      df$MORB_DESC == 1 |      # Outra comorbidade descrita
+      df$DIABETES == 1 |       # Tem diabetes
+      df$HEMATOLOGI == 1 |     # Tem doença hematológica
+      df$HEPATICA == 1 |       # Tem doença hepática (do fígado)
+      df$IMUNODEPRE == 1 |     # É imunodeprimido
+      df$NEUROLOGIC == 1 |     # Tem doença neurológica
+      df$OBES_IMC == 1 |       # Obesidade (informada via IMC)
+      df$OBESIDADE == 1 |      # Obesidade (informada diretamente)
+      df$OUT_MORBI == 1 |      # Outra morbidade
+      df$PNEUMOPATI == 1 |     # Tem pneumopatia (doença pulmonar)
+      df$PUERPERA == 1 |       # Está no período puerperal (após o parto)
+      df$RENAL == 1 |          # Tem doença renal
+      df$SIND_DOWN == 1 |      # Tem síndrome de Down
+      df$TABAG == 1,           # É tabagista (fuma)
+    
+    1,  # Se alguma das condições acima for verdadeira, atribui 1 (tem fator de risco)
+    0   # Caso contrário, atribui 0 (não tem fator de risco)
+  )
+  
+  # Verificando o total de observações
+  table(df$fator_risco)
+  
+  # ..........................................................................................
+  ##                       ---- MANIPULAÇAO DAS VARIÁVEIS CRIADAS ----
+  # ..........................................................................................
+  
+  # Lista de variáveis para substituir NA por 0
+  variaveis_para_substituir <- c('out_agentes',
+                                 'out_agentes_obito',
+                                 'n_detectado',
+                                 'investigacao',
+                                 'investigacao_obito',
+                                 'srag_n_especificada',
+                                 'fator_risco',
+                                 'srag_n_especificada_obito')
+  
+  # Substituir NA por 0 nas variáveis listadas
+  df <- df %>%
+    mutate(across(any_of(variaveis_para_substituir), ~ ifelse(is.na(.), 0, .)))
+  
+  # ..........................................................................................
+  ##                       ---- CRIANDO A SRAG TOTAL ----
+  # ..........................................................................................
+  
+  # Criando uma nova variável chamada 'srag_total_casos' na base 'df'
+  # Essa variável indica se o caso foi causado por algum agente etiológico de SRAG
+  # A variável será 1 se o caso for positivo para qualquer uma das categorias listadas, e 0 caso contrário
+  
+  df <- df %>%
+    mutate(
+      srag_total_casos = if_else(
+        covid_caso_unico == 1 |                     # Caso único de COVID-19
+          influenza_geral_unico == 1 |                # Caso único de Influenza (geral)
+          vsr_caso_unico == 1 |                       # Caso único de Vírus Sincicial Respiratório (VSR)
+          rinovirus_caso_unico == 1 |                 # Caso único de Rinovírus
+          ovr_caso_unico == 1 |                       # Caso único de Outros Vírus Respiratórios (OVR)
+          investigacao == 1 |                         # Caso ainda em investigação
+          out_agentes == 1 |                          # Causado por outros agentes (não especificados acima)
+          srag_n_especificada == 1 |                  # SRAG não especificada
+          codeteccao_casos == 1,                      # Codetecção (dois ou mais agentes detectados)
+        1,                                          # Se qualquer uma das condições acima for verdadeira, atribui 1
+        0                                           # Caso contrário, atribui 0
+      )
+    )
+  
+  # Exibindo uma tabela de frequência da nova variável srag_total_casos (para verificar a distribuição dos valores)
+  table(df$srag_total_casos)
+  
+  
+  # Criando agora a variável 'srag_total_obitos', com lógica semelhante à de casos
+  # Essa variável indica se houve óbito associado a qualquer uma das causas listadas
+  
+  df <- df %>%
+    mutate(
+      srag_total_obitos = if_else(
+        covid_obito_unico == 1 |                    # Óbito por COVID-19 (único agente)
+          influenza_geral_obito_unico == 1 |          # Óbito por Influenza (geral)
+          vsr_obito_unico == 1 |                      # Óbito por VSR
+          ovr_obito_unico == 1 |                      # Óbito por outros vírus respiratórios
+          rinovirus_obito_unico == 1 |                # Óbito por Rinovírus
+          investigacao_obito == 1 |                   # Óbito em investigação
+          out_agentes_obito == 1 |                    # Óbito por outros agentes
+          srag_n_especificada_obito == 1 |            # Óbito por SRAG não especificada
+          codeteccao_obito == 1,                      # Óbito com codetecção
+        1,                                          # Atribui 1 se houver qualquer condição verdadeira
+        0                                           # Caso contrário, atribui 0
+      )
+    )
+  
+  # Exibindo uma tabela de frequência da variável srag_total_obitos
+  table(df$srag_total_obitos)
+  
+  
+  # ..........................................................................................
+  ##                       ---- EXPORTAÇÃO ----
+  # ..........................................................................................
+  
+  nome_base <- gsub("df_", "", nome_df)
+  
+  # Exceção: df_2026 com se_primeiro_sinto
+  if (nome_df == "df_2026") {
+    ultimo_sempri <- max(as.numeric(df$se_primeiro_sinto), na.rm = TRUE)
+    nome_base <- paste0("2026_", ultimo_sempri)
+  }
+  
+  # # Salvar
+  # write_csv2(df, paste0(path_csv, nome_base, ".csv"))
+  # save(df, file = paste0(path_rdata, nome_base, ".RData"))
+  write_parquet(df, paste0(path_parquet, nome_base, ".parquet"))
+  
+  message("✔ Banco ", nome_df, " exportado com sucesso!")
+}
+
+# Loop principal
+for (nome_df in lista_bancos) {
+  processar_salvar(nome_df)
+}
+
