@@ -1360,3 +1360,328 @@ for (nome_df in lista_bancos) {
   processar_salvar(nome_df)
 }
 
+#=============================================
+# Lista de variáveis únicas do SIVEP-Gripe
+#=============================================
+# Domínio	Variáveis
+#---------------------------------------------
+# Identificação e população	==================  HOSPITAL, DT_INTERNA, DT_SIN_PRI, NU_IDADE_N, TP_IDADE
+# Classificação SRAG/influenza ===============	CLASSI_FIN, CRITERIO, POS_PCRFLU, POS_AN_FLU
+# Vacinação influenza ========================	VACINA
+# Utilização de UTI	==========================  UTI, DT_ENTUTI, DT_SAIDUTI
+# Desfechos	==================================  EVOLUCAO, DT_EVOLUCA, DT_ENCERRA
+# Suporte ventilatório e gravidade =========== 	SUPORT_VEN, SATURACAO
+# Características sociodemográficas	==========  CS_SEXO, CS_RACA, CS_ESCOL_N
+# Comorbidades	==============================  FATOR_RISC e 12 variáveis de condições clínicas
+# Localização geográfica =====================	SG_UF, CO_MUN_RES
+# Sazonalidade	==============================  SEM_PRI
+# Tratamento antiviral ======================= 	ANTIVIRAL, TP_ANTIVIR, DT_ANTIVIR
+# Vacinação ==================================  COVID-19	VACINA_COV
+# Infecção hospitalar========================= 	NOSOCOMIAL
+
+
+
+# ============================================================
+# SELEÇÃO DAS VARIÁVEIS DO ESTUDO
+# Projeto: Influenza vaccination and outcomes in adults
+# hospitalised with influenza SARI in Brazil
+# Fonte: Variable.docx
+# ============================================================
+
+SRAG_IDOT <- import("C:/Users/giovani.costa/OneDrive - EBSERH/Documentos/SARI_IDOT/data/clean/parquet/srag_total.parquet")
+
+
+#================= CRIAR ESTADO ROBUSTO ----
+
+SRAG_IDOT <-  SRAG_IDOT %>% 
+  mutate(
+    estado =  coalesce(SG_UF, SG_UF_NOT)
+    
+  )
+
+#================ LEGENDA CODIGO IDADE ADULTO ----
+
+n1 = nrow(SRAG_IDOT)
+# $TP_IDADE - "character" ----
+# # [1] "2" "3" "1"
+# 1-Dia
+# 2-Mês
+# 3-Ano
+class(SRAG_IDOT$TP_IDADE)
+
+#================= CRIAR IDADE ----
+
+SRAG_IDOT <- SRAG_IDOT %>% 
+  rename(
+    IDADE = NU_IDADE_N
+  )
+
+SRAG_IDOT_idade <-  SRAG_IDOT %>% 
+  filter(TP_IDADE == "3" )
+
+#================= FILTRAR IDADE -----
+
+SRAG_IDOT_idade <-  SRAG_IDOT_idade %>% 
+  filter(IDADE >= 18 )
+
+summary(SRAG_IDOT_idade$IDADE)
+
+
+names(SRAG_IDOT_idade)
+srag_total <- SRAG_IDOT_idade
+
+variaveis_estudo <- c(
+  
+  # 1. Population and cohort
+  "IDADE",
+  "HOSPITAL",
+  "DT_INTERNA",
+  "DT_SIN_PRI",
+  "NU_IDADE_N",
+  "TP_IDADE",
+  
+  # 2. SARI and influenza classification
+  "CLASSI_FIN",
+  "CRITERIO",
+  "POS_PCRFLU",
+  "POS_AN_FLU",
+  
+  # 3. Influenza vaccination
+  "VACINA",
+  
+  # 4. ICU admission
+  "UTI",
+  "DT_ENTUTI",
+  "DT_SAIDUTI",
+  
+  # 5. Outcomes
+  "EVOLUCAO",
+  "DT_EVOLUCA",
+  "DT_ENCERRA",
+  
+  # 6. Severity and respiratory support
+  "SUPORT_VEN",
+  "SATURACAO",
+  
+  # 7. Sociodemographic characteristics
+  "CS_SEXO",
+  "CS_RACA",
+  "CS_ESCOL_N",
+  
+  # 8. Comorbidities
+  "FATOR_RISC",
+  "PUERPERA",                             "CARDIOPATI",                          
+ "HEMATOLOGI",                           "SIND_DOWN",                           
+ "HEPATICA",                             "ASMA",                                
+ "DIABETES",                             "NEUROLOGIC",                          
+ "PNEUMOPATI",                           "IMUNODEPRE",                          
+"RENAL",                                "OBESIDADE",                           
+"OBES_IMC",                             "OUT_MORBI",
+  
+  
+  # 9. Geographic variables
+  "SG_UF",
+  "CO_MUN_RES",
+  "SG_UF_NOT",
+  
+  # 10. Seasonality
+  "SEM_PRI",
+  
+  # 11. Antiviral treatment
+  "ANTIVIRAL",
+  "TP_ANTIVIR",
+  "DT_ANTIVIR",
+  
+  # 12. COVID-19 vaccination
+  "VACINA_COV",
+  
+  # 13. Hospital-acquired infection
+  "NOSOCOMIAL",
+ 
+ #14. infeccoes
+ "criterio_1",
+ "criterio_2",
+ "criterio_3",
+ "caso_srag",
+ "idade_anos",
+ "idade_cat",
+ "ano",
+ "se_primeiro_sinto",
+ "regiao",
+ "covid_caso",
+ "covid_obito",
+ "influenza_h1n1_caso",
+ "influenza_h1n1_obito",
+ "influenza_h3n2_caso",
+ "influenza_h3n2_obito",
+ "influenza_A_inconclusiva_caso",
+ "influenza_A_inconclusiva_obito",
+ "influenza_A_n_subtipavel_caso",
+ "influenza_A_n_subtipavel_obito",
+ "influenza_A_n_sub_caso",
+ "influenza_A_n_sub_obito",
+ "influenza_A_total",
+ "influenza_A_total_obito",
+ "influenza_B_vict_caso",
+ "influenza_B_vict_obito",
+ "influenza_B_yam_caso",
+ "influenza_B_yam_obito",
+ "influenza_B_inconclusivo_caso",
+ "influenza_B_inconclusivo_obito",
+ "influenza_B_total",
+ "influenza_B_total_obito",
+ "influenza_geral_casos",
+ "influenza_geral_obito",
+ "vsr_caso",
+ "vsr_obito",
+ "adenovirus_caso",
+ "adenovirus_obito",
+ "rinovirus_caso",
+ "rinovirus_obito",
+ "parainfluenza_caso",
+ "parainfluenza_obito",
+ "metapneumo_caso",
+ "metapneumo_obito",
+ "bocavirus_caso",
+ "bocavirus_obito",
+ "outros_virus_caso",
+ "outros_virus_obito",
+ "ovr_caso",
+ "ovr_obito",
+ "soma_casos",
+ "codeteccao_casos",
+ "soma_obitos",
+ "codeteccao_obito",
+ "out_agentes",
+ "out_agentes_obito",
+ "n_detectado",
+ "investigacao",
+ "investigacao_obito",
+ "srag_n_especificada",
+ "srag_n_especificada_obito",
+ "covid_caso_unico",
+ "covid_obito_unico",
+ "influenza_h1n1_caso_unico",
+ "influenza_h1n1_obito_unico",
+ "influenza_h3n2_caso_unico",
+ "influenza_h3n2_obito_unico",
+ "influenza_A_n_subtipavel_caso_unico",
+ "influenza_A_n_subtipavel_obito_unico",
+ "influenza_A_n_sub_caso_unico",
+ "influenza_A_n_sub_obito_unico",
+ "influenza_A_total_unico",
+ "influenza_B_vict_caso_unico",
+ "influenza_B_vict_obito_unico",
+ "influenza_B_yam_caso_unico",
+ "influenza_B_yam_obito_unico",
+ "influenza_B_inconclusivo_caso_unico",
+ "influenza_B_inconclusivo_obito_unico",
+ "influenza_B_total_unico",
+ "influenza_B_total_obito_unico",
+ "influenza_geral_unico",
+ "influenza_geral_obito_unico",
+ "vsr_caso_unico",
+ "vsr_obito_unico",
+ "adenovirus_caso_unico",
+ "adenovirus_obito_unico",
+ "rinovirus_caso_unico",
+ "rinovirus_obito_unico",
+ "parainfluenza_caso_unico",
+ "parainfluenza_obito_unico",
+ "metapneumo_caso_unico",
+ "metapneumo_obito_unico",
+ "bocavirus_caso_unico",
+ "bocavirus_obito_unico",
+ "outros_virus_caso_unico",
+ "outros_virus_obito_unico",
+ "ovr_caso_unico",
+ "ovr_obito_unico",
+ "fator_risco",
+ "srag_total_casos",
+ "srag_total_obitos"
+)
+
+# ============================================================
+# IDENTIFICAR VARIÁVEIS DISPONÍVEIS
+# ============================================================
+
+variaveis_disponiveis <- intersect(
+  variaveis_estudo,
+  names(srag_total)
+)
+
+variaveis_ausentes <- setdiff(
+  variaveis_estudo,
+  names(srag_total)
+)
+variaveis_disponiveis
+variaveis_ausentes
+
+# ============================================================
+# SELECIONAR VARIÁVEIS
+# ============================================================
+
+srag_estudo <- srag_total %>%
+  dplyr::select(dplyr::any_of(variaveis_estudo))
+
+# ============================================================
+# CONFERÊNCIA
+# ============================================================
+
+# Dimensão da nova base
+dim(srag_estudo)
+
+# Variáveis selecionadas
+names(srag_estudo)
+
+# Variáveis disponíveis
+variaveis_disponiveis
+
+# Variáveis ausentes no banco original
+variaveis_ausentes
+
+# Estrutura da base
+glimpse(srag_estudo)
+
+
+srag_estudo <- srag_estudo %>%
+  rename_with(
+    ~ paste0("COM_", .x),
+    .cols = c(
+      PUERPERA,
+      CARDIOPATI,
+      HEMATOLOGI,
+      SIND_DOWN,
+      HEPATICA,
+      ASMA,
+      DIABETES,
+      NEUROLOGIC,
+      PNEUMOPATI,
+      IMUNODEPRE,
+      RENAL,
+      OBESIDADE,
+      OBES_IMC,
+      OUT_MORBI
+    )
+  )
+
+nrow(srag_estudo)
+
+names(srag_estudo)
+
+srag_estudo %>% 
+  select(
+    -starts_with("DT"),
+    -starts_with("IDADE")
+  ) %>% 
+  lapply(unique)
+
+
+
+
+#====== CRIANDO A COORTE===
+
+# População-fonte
+# Todos os registros de SRAG identificados no SIVEP-Gripe no período de estudo
+# Identificação dos casos elegíveis
+# SRAG + idade ≥18 anos + hospitalização + INFECCOES
