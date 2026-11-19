@@ -1390,7 +1390,9 @@ for (nome_df in lista_bancos) {
 
 SRAG_IDOT <- import("C:/Users/giovani.costa/OneDrive - EBSERH/Documentos/SARI_IDOT/data/clean/parquet/srag_total.parquet")
 
-
+#=====================================================
+# VARAIVEIS DERIVADAS ----
+##=====================================================
 #================= CRIAR ESTADO ROBUSTO ----
 
 SRAG_IDOT <-  SRAG_IDOT %>% 
@@ -1399,36 +1401,75 @@ SRAG_IDOT <-  SRAG_IDOT %>%
     
   )
 
-#================ LEGENDA CODIGO IDADE ADULTO ----
-
-n1 = nrow(SRAG_IDOT)
-# $TP_IDADE - "character" ----
-# # [1] "2" "3" "1"
-# 1-Dia
-# 2-Mês
-# 3-Ano
-class(SRAG_IDOT$TP_IDADE)
-
-#================= CRIAR IDADE ----
+#================ IDADE -----
+#---- IDADE -------------------------------------------
 
 SRAG_IDOT <- SRAG_IDOT %>% 
-  rename(
-    IDADE = NU_IDADE_N
+  mutate(
+    TP_IDADE = as.integer(TP_IDADE),
+    IDADE = as.numeric(NU_IDADE_N)
+  ) %>% 
+  filter(
+    TP_IDADE == 3,
+    !is.na(IDADE),
+    IDADE >= 18,
+    IDADE <= 150
   )
 
-SRAG_IDOT_idade <-  SRAG_IDOT %>% 
-  filter(TP_IDADE == "3" )
+summary(SRAG_IDOT$IDADE)
 
-#================= FILTRAR IDADE -----
+#----1. Tempo entre início dos sintomas e internação ----
 
-SRAG_IDOT_idade <-  SRAG_IDOT_idade %>% 
-  filter(IDADE >= 18 )
+SRAG_IDOT <- SRAG_IDOT %>%
+  mutate(
+    
+#---- 1. Tempo entre início dos sintomas e internação
+    tempo_sintomas_internacao_bruto = as.numeric(
+      DT_INTERNA - DT_SIN_PRI
+    ),
+    
+    tempo_sintomas_internacao = case_when(
+      is.na(tempo_sintomas_internacao_bruto) ~ NA_real_,
+      tempo_sintomas_internacao_bruto < 0 ~ NA_real_,
+      tempo_sintomas_internacao_bruto > 60 ~ NA_real_,
+      TRUE ~ tempo_sintomas_internacao_bruto
+    ),
+    
+#---- 2. Tempo entre internação e entrada na UTI ----
+    tempo_internacao_UTI_bruto = as.numeric(
+      DT_ENTUTI - DT_INTERNA
+    ),
+    
+    tempo_internacao_UTI = case_when(
+      is.na(tempo_internacao_UTI_bruto) ~ NA_real_,
+      tempo_internacao_UTI_bruto < 0 ~ NA_real_,
+      TRUE ~ tempo_internacao_UTI_bruto
+    ),
+    
+#---- 3. Permanência na UTI ----
+    tempo_permanencia_UTI_bruto = as.numeric(
+      DT_SAIDUTI - DT_ENTUTI
+    ),
+    
+    tempo_permanencia_UTI = case_when(
+      is.na(tempo_permanencia_UTI_bruto) ~ NA_real_,
+      tempo_permanencia_UTI_bruto < 0 ~ NA_real_,
+      TRUE ~ tempo_permanencia_UTI_bruto
+    ),
+    
+#---- 4. Tempo entre internação e evolução hospitalar ----
+    tempo_internacao_bruto = as.numeric(
+      DT_EVOLUCA - DT_INTERNA
+    ),
+    
+    tempo_internacao = case_when(
+      is.na(tempo_internacao_bruto) ~ NA_real_,
+      tempo_internacao_bruto < 0 ~ NA_real_,
+      TRUE ~ tempo_internacao_bruto
+    )
+  )
 
-summary(SRAG_IDOT_idade$IDADE)
 
-
-names(SRAG_IDOT_idade)
-srag_total <- SRAG_IDOT_idade
 
 variaveis_estudo <- c(
   
@@ -1621,7 +1662,7 @@ variaveis_ausentes
 # SELECIONAR VARIÁVEIS
 # ============================================================
 
-srag_estudo <- srag_total %>%
+srag_estudo <- SRAG_IDOT %>%
   dplyr::select(dplyr::any_of(variaveis_estudo))
 
 # ============================================================
